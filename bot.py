@@ -1,19 +1,18 @@
 import requests
-import logging
 import json
 import re
 from bs4 import BeautifulSoup
+from svglib.svglib import svg2rlg
+from reportlab.graphics import renderPDF
+from reportlab.pdfgen import canvas
 
-
-url = "https://musescore.com/user/8927976/scores/1993341"
+url = "https://musescore.com/user/29304314/scores/5172780"
 
 while(not url):
     url = input('Please enter the url of the music sheet you wish to download: ')
-    if ('musescore' not in url):
-        print('invalid url address!')
+    if ("musescore.com/user" not in url):
+        print('invalid URL address!')
         url = None
-
-# logging.basicConfig(level=logging.DEBUG)
 
 split_url = re.sub('https://', '', url)
 split_url = re.sub('www.', '', split_url)
@@ -61,7 +60,8 @@ if (not jmuse):
 r = requests.get(jmuse, headers=header)
 
 if (r.status_code != 200):
-    print("error at HTTP GET: {}\nstatus code: {}").__format__(jmuse, r.status_code)
+    print("error at HTTP GET: {}\nstatus code: {}").__format__(
+        jmuse, r.status_code)
 
 token_regex = re.compile("[a-z0-9]{40}")
 
@@ -80,7 +80,7 @@ for i in range(0, pages_count):
         score_id, i)
 
     page_url = json.loads(requests.get(jmuse_url, headers=score_header).text)[
-                          'info']['url']
+        'info']['url']
 
     r = requests.get(page_url, headers=header, stream=True)
 
@@ -97,3 +97,21 @@ for i in range(0, pages_count):
 
             svgfile.write(block)
     svgfile.close()
+
+print("download success!")
+
+c = canvas.Canvas('file.pdf')
+
+for i in range(0, pages_count):
+
+    print("generating pdf page {} of {}...".format(i + 1, pages_count))
+
+    drawing = svg2rlg("./files/score{}.svg".format(i))
+
+    renderPDF.draw(drawing, c, 0, 0, 0)
+
+    c.showPage()
+
+c.save()
+
+print("pdf creation success!")
