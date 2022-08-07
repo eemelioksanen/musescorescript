@@ -1,5 +1,7 @@
 from asyncio.windows_events import NULL
 import http
+from itertools import dropwhile
+from urllib import response
 import requests
 import logging
 import json
@@ -16,14 +18,14 @@ while(not URL):
     if ('musescore' not in URL):
         print('invalid URL address!')
         URL = None
-logging.basicConfig(level=logging.DEBUG)
+# logging.basicConfig(level=logging.DEBUG)
 
 split_url = re.sub('https://', '', URL)
 split_url = re.sub('www.', '', split_url)
 split_url = split_url.split('/')
 
-user = split_url[2]
-score = split_url[4]
+user_id = split_url[2]
+score_id = split_url[4]
 
 headers = {
     "authority": "musescore.com",
@@ -44,38 +46,82 @@ headers = {
     "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/104.0.5112.81 Safari/537.36 Edg/104.0.1293.47"
 }
 
-headers2 = {
-    "authority": "musescore.com",
-    "method": "GET",
-    "path": "/ api/jmuse?id = 1993341 & index = 5 & type = img & v2 = 1: scheme: https",
-    "accept": "*/*",
-    "accept-encoding": "gzip, deflate, br",
-    "accept-language": "fi, en q = 0.9, en-GB q = 0.8, en-US q = 0.7",
-    "authorization": "8c022bdef45341074ce876ae57a48f64b86cdcf5", # important
-    "cache-control": "no-cache",
-    "pragma": "no-cache",
-    "referer": "https: // musescore.com/user/8927976/scores/1993341",
-    "sec-ch-ua": "\"Chromium\";v=\"104\", \" Not A;Brand\";v=\"99\", \"Microsoft Edge\";v=\"104\"",
-    "sec-ch-ua-mobile": "?0",
-    "sec-ch-ua-platform": "\"Windows\"",
-    "sec-fetch-dest": "empty",
-    "sec-fetch-mode": "cors",
-    "sec-fetch-site": "same-orig",
-    "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/104.0.5112.81 Safari/537.36 Edg/104.0.1293.47"
-}
-
 r = requests.get(URL, headers=headers)
 
 page = BeautifulSoup(r.content, 'html.parser')
 
+pageregex = re.compile('(pages_count&quot;:[0-9]{1,2})')
+
+pages_count = int(re.findall(
+    '[0-9]{1,2}', re.findall(pageregex, r.text)[0])[0])
+
+if (pages_count > 99):
+    exit()
+
+# urlregex1 = re.compile(
+# "(https://musescore.com/static/public/build/musescore/)[0-9]{1,}(/)[0-9]{1,}(.)[a-z0-9]{1,}(.js)")
+
+# regex2 = re.compile(
+# "(https://musescore.com/static/public/build/musescore_es6/)[0-9]{1,}(/)[0-9]{1,}(.)[a-z0-9]{1,}(.js)")
+
+regex = re.compile(
+    "(https://musescore.com/static/public/build/musescore)(_es6)?(/)[0-9]{1,}(/)[0-9]{1,}(.)[a-z0-9]{1,}(.js)"
+)
+
+jmuse = None
+
 for link in page.find_all('link'):
-    print(link.get('href'))
+    if (regex.match(link.get('href'))):
+        jmuse = link.get('href')
+        break
 
-# URL2 = 'https://musescore.com/api/jmuse?id=1993341&index=1&type=img&v2=1'
+print(jmuse)
 
-# URL3 = 'https://musescore.com/api/jmuse?id=4913846&index=1&type=img&v2=1'
+if (not jmuse):
+    print("could not find the jmuse link to extract authorization token")
+    exit()
 
-# r2 = requests.get(URL2, headers=headers2)
+r = requests.get(jmuse, headers=headers)
 
-# print(r.text)
-# print(r2.json())
+if (r.status_code != 200):
+    print("error at HTTP GET: {}\nstatus code: {}").__format__(jmuse, r.status_code)
+
+token_regex = re.compile("[a-z0-9]{40}")
+
+token = re.findall(token_regex, r.text)[0]
+
+score_header = {
+    "authorization": token,
+    "referer": "https: // musescore.com/user/{}/scores/{}".format(user_id, score_id),
+    "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/104.0.5112.81 Safari/537.36 Edg/104.0.1293.47"
+}
+
+page_header = {
+    "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/104.0.5112.81 Safari/537.36 Edg/104.0.1293.47"
+}
+
+for i in range(0, pages_count):
+
+    print('downloading page {} of {}...'.format(i + 1, pages_count))
+
+    jmuse_url = 'https://musescore.com/api/jmuse?id={}&index={}&type=img&v2=1'.format(
+        score_id, i)
+
+    page_url = json.loads(requests.get(jmuse_url, headers=score_header).text)[
+                          'info']['url']
+
+    r = requests.get(page_url, headers=page_header, stream=True)
+
+    if (r.status_code != 200):
+        print("an error occured while downloading the files")
+        exit()
+
+    with open('score{}.svg'.format(i), 'wb') as svgfile:
+
+        res = requests.get(page_url, headers=page_header, stream=True)
+        for block in res.iter_content():
+            if not block:
+                break
+
+            svgfile.write(block)
+    svgfile.close()
