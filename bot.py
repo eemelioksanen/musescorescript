@@ -1,3 +1,4 @@
+from cgi import test
 from fileinput import close
 import requests
 import json
@@ -13,7 +14,7 @@ url = None
 
 while(not url):
     url = input('Please enter the url of the music sheet you wish to download: ')
-    if ("musescore.com/user" not in url):
+    if ("musescore.com" not in url):
         print('invalid URL address!')
         url = None
 
@@ -21,7 +22,14 @@ split_url = re.sub('https://', '', url)
 split_url = re.sub('www.', '', split_url)
 split_url = split_url.split('/')
 
-score_id = split_url[4]
+score_id = None
+
+if (len(split_url) == 5):
+    score_id = split_url[4]
+
+else:
+    score_id = split_url.pop()
+print(score_id)
 
 header = {
     "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/104.0.5112.81 Safari/537.36 Edg/104.0.1293.47"
@@ -115,6 +123,10 @@ if (filetype == "image/svg+xml"):
 
         drawing = svg2rlg(svgfile)
 
+        scale = 595.0 / drawing.width
+
+        drawing.scale(scale, scale)
+
         renderPDF.draw(drawing, c, 0, 0, 0)
 
         c.showPage()
@@ -143,9 +155,9 @@ elif (filetype == "image/png"):
 
         res = requests.get(page_url, headers=header)
 
-        pngfile = io.BytesIO(res.content)
+        pngfile = Image.open(io.BytesIO(res.content))
 
-        images.append(Image.open(pngfile))
+        images.append(pngfile)
 
     print("generating pdf...")
     images[0].save(filepath, "PDF", resolution=100.0, save_all=True, append_images=images[1:])
