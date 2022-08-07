@@ -1,3 +1,4 @@
+from fileinput import close
 import requests
 import json
 import re
@@ -5,8 +6,10 @@ from bs4 import BeautifulSoup
 from svglib.svglib import svg2rlg
 from reportlab.graphics import renderPDF
 from reportlab.pdfgen import canvas
+import io
+from PIL import Image
 
-url = "https://musescore.com/user/29304314/scores/5172780"
+url = None
 
 while(not url):
     url = input('Please enter the url of the music sheet you wish to download: ')
@@ -18,7 +21,6 @@ split_url = re.sub('https://', '', url)
 split_url = re.sub('www.', '', split_url)
 split_url = split_url.split('/')
 
-user_id = split_url[2]
 score_id = split_url[4]
 
 header = {
@@ -31,6 +33,10 @@ if (r.status_code != 200):
     print("error connecting to {}".format(url))
 
 page = BeautifulSoup(r.content, 'html.parser')
+
+title = page.title.text.replace(" | Musescore.com", "")
+
+print(title)
 
 pageregex = re.compile('(pages_count&quot;:[0-9]{1,2})')
 
@@ -72,46 +78,76 @@ score_header = {
     "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/104.0.5112.81 Safari/537.36 Edg/104.0.1293.47"
 }
 
-for i in range(0, pages_count):
+filepath = "{}.pdf".format(title)
 
-    print('downloading page {} of {}...'.format(i + 1, pages_count))
+filetype = requests.get(
+    json.loads(
+        requests.get('https://musescore.com/api/jmuse?id={}&index={}&type=img&v2=1'.format(score_id, 0),
+                     headers=score_header).text)
+    ['info']['url']).headers['Content-Type']
 
-    jmuse_url = 'https://musescore.com/api/jmuse?id={}&index={}&type=img&v2=1'.format(
-        score_id, i)
+print("image content type: {}".format(filetype))
 
-    page_url = json.loads(requests.get(jmuse_url, headers=score_header).text)[
-        'info']['url']
+if (filetype == "image/svg+xml"):
 
-    r = requests.get(page_url, headers=header, stream=True)
+    c = canvas.Canvas(filepath)
 
-    if (r.status_code != 200):
-        print("an error occured while downloading the files")
-        exit()
+    for i in range(0, pages_count):
 
-    with open('./files/score{}.svg'.format(i), 'wb') as svgfile:
+        print("downloading image and generating pdf page {} of {}...".format(
+            i + 1, pages_count))
 
-        res = requests.get(page_url, headers=header, stream=True)
-        for block in res.iter_content():
-            if not block:
-                break
+        jmuse_url = 'https://musescore.com/api/jmuse?id={}&index={}&type=img&v2=1'.format(
+            score_id, i)
 
-            svgfile.write(block)
-    svgfile.close()
+        page_url = json.loads(requests.get(jmuse_url, headers=score_header).text)[
+            'info']['url']
 
-print("download success!")
+        r = requests.get(page_url, headers=header, stream=True)
 
-c = canvas.Canvas('file.pdf')
+        if (r.status_code != 200):
+            print("an error occured while downloading the files")
+            exit()
 
-for i in range(0, pages_count):
+        res = requests.get(page_url, headers=header)
 
-    print("generating pdf page {} of {}...".format(i + 1, pages_count))
+        svgfile = io.StringIO(res.text)
 
-    drawing = svg2rlg("./files/score{}.svg".format(i))
+        drawing = svg2rlg(svgfile)
 
-    renderPDF.draw(drawing, c, 0, 0, 0)
+        renderPDF.draw(drawing, c, 0, 0, 0)
 
-    c.showPage()
+        c.showPage()
 
-c.save()
+    c.save()
+
+elif (filetype == "image/png"):
+
+    images = []
+
+    for i in range(0, pages_count):
+
+        print("downloading image {} of {}...".format(
+            i + 1, pages_count))
+            
+        jmuse_url = 'https://musescore.com/api/jmuse?id={}&index={}&type=img&v2=1'.format(
+            score_id, i)
+        page_url = json.loads(requests.get(jmuse_url, headers=score_header).text)[
+                              'info']['url']
+
+        r = requests.get(page_url, headers=header, stream=True)
+
+        if (r.status_code != 200):
+            print("an error occured while downloading the files")
+            exit()
+
+        res = requests.get(page_url, headers=header)
+
+        pngfile = io.BytesIO(res.content)
+
+        images.append(Image.open(pngfile))
+
+    print("generating pdf...")
+    images[0].save(filepath, "PDF", resolution=100.0, save_all=True, append_images=images[1:])
 
 print("pdf creation success!")
