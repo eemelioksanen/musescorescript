@@ -116,7 +116,7 @@ for i in range(0, pages_count):
         print("an error occured while downloading the files")
         exit()
 
-    with open('score{}.svg'.format(i), 'wb') as svgfile:
+    with open('./files/score{}.svg'.format(i), 'wb') as svgfile:
 
         res = requests.get(page_url, headers=page_header, stream=True)
         for block in res.iter_content():
