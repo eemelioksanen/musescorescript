@@ -37,16 +37,16 @@ r = requests.get(url, headers=header)
 if (r.status_code != 200):
     print("error connecting to {}".format(url))
 
-page = BeautifulSoup(r.content, 'html.parser')
+page = BeautifulSoup(r.content, "html.parser")
 
 title = page.title.text.replace(" | Musescore.com", "")
 
 print(title)
 
-pageregex = re.compile('(pages_count&quot;:[0-9]{1,2})')
+pageregex = re.compile("(pages_count&quot;:[0-9]{1,2})")
 
 pages_count = int(re.findall(
-    '[0-9]{1,2}', re.findall(pageregex, r.text)[0])[0])
+    "[0-9]{1,2}", re.findall(pageregex, r.text)[0])[0])
 
 print("pages: {}".format(pages_count))
 
@@ -61,9 +61,9 @@ regex = re.compile(
 
 jmuse = None
 
-for link in page.find_all('link'):
-    if (regex.match(link.get('href'))):
-        jmuse = link.get('href')
+for link in page.find_all("link"):
+    if (regex.match(link.get("href"))):
+        jmuse = link.get("href")
         break
 
 if (not jmuse):
@@ -93,9 +93,9 @@ filetype = requests.get(
 
 print("image content type: {}".format(filetype))
 
-if (filetype == "image/svg+xml"):
+filepath = "output_default.pdf"
 
-    filepath = "output.pdf"
+if (filetype == "image/svg+xml"):
 
     c = canvas.Canvas(filepath)
 
@@ -104,11 +104,11 @@ if (filetype == "image/svg+xml"):
         print("downloading image and generating pdf page {} of {}...".format(
             i + 1, pages_count))
 
-        jmuse_url = 'https://musescore.com/api/jmuse?id={}&index={}&type=img&v2=1'.format(
+        jmuse_url = "https://musescore.com/api/jmuse?id={}&index={}&type=img&v2=1".format(
             score_id, i)
 
         page_url = json.loads(requests.get(jmuse_url, headers=score_header).text)[
-            'info']['url']
+            "info"]["url"]
 
         r = requests.get(page_url, headers=header, stream=True)
 
@@ -134,8 +134,6 @@ if (filetype == "image/svg+xml"):
 
 elif (filetype == "image/png"):
 
-    filepath = "output.pdf"  # "D:\Ohjelmointi\musescorebot\output.pdf"
-
     images = []
 
     for i in range(0, pages_count):
@@ -143,7 +141,7 @@ elif (filetype == "image/png"):
         print("downloading image {} of {}...".format(
             i + 1, pages_count))
 
-        jmuse_url = 'https://musescore.com/api/jmuse?id={}&index={}&type=img&v2=1'.format(
+        jmuse_url = "https://musescore.com/api/jmuse?id={}&index={}&type=img&v2=1".format(
             score_id, i)
         page_url = json.loads(requests.get(jmuse_url, headers=score_header).text)[
             'info']['url']
@@ -170,9 +168,13 @@ else:
 
 try:
 
-    rename('output.pdf', "{}.pdf".format(title).replace(
-        '/', '').replace('|', '').replace('&', '').replace(':', ''))
+    new_name = re.sub(re.compile("[^0-9a-zA-Z,()' ]"), "", title)
+    new_name += ".pdf"
+    rename(filepath, new_name)
+
 except Exception as e:
-    print("renaming the pdf file failed, saved using default name \"output.pdf\"")
+
+    print("renaming the pdf file failed, saved using default name \"{}\"\nerror: {}".format(
+        filepath, e))
 
 print("pdf creation success!")
