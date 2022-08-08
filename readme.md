@@ -2,7 +2,7 @@
 
 ## installation
 Install the following dependencies:
-`beautifulsoup4, svglib, reportlab, Pillow`
+`pip install -r requirements.txt`
 
 Then run the program by giving an url as a parameter:
 `py msbot.py http://musescore.com/user/xxxxx/score/xxxxx`
