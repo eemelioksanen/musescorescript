@@ -1,5 +1,3 @@
-from cgi import test
-from fileinput import close
 import requests
 import json
 import re
@@ -9,14 +7,14 @@ from reportlab.graphics import renderPDF
 from reportlab.pdfgen import canvas
 import io
 from PIL import Image
+from os import rename
+import sys
 
-url = None
+if (len(sys.argv) != 2):
+    print("invalid number of arguments!")
+    exit()
 
-while(not url):
-    url = input('Please enter the url of the music sheet you wish to download: ')
-    if ("musescore.com" not in url):
-        print('invalid URL address!')
-        url = None
+url = sys.argv[1]
 
 split_url = re.sub('https://', '', url)
 split_url = re.sub('www.', '', split_url)
@@ -29,7 +27,6 @@ if (len(split_url) == 5):
 
 else:
     score_id = split_url.pop()
-print(score_id)
 
 header = {
     "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/104.0.5112.81 Safari/537.36 Edg/104.0.1293.47"
@@ -50,6 +47,8 @@ pageregex = re.compile('(pages_count&quot;:[0-9]{1,2})')
 
 pages_count = int(re.findall(
     '[0-9]{1,2}', re.findall(pageregex, r.text)[0])[0])
+
+print("pages: {}".format(pages_count))
 
 # exit in case of obscure amount of pages
 if (pages_count > 50 or pages_count < 0):
@@ -86,17 +85,17 @@ score_header = {
     "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/104.0.5112.81 Safari/537.36 Edg/104.0.1293.47"
 }
 
-filepath = "{}.pdf".format(title)
-
 filetype = requests.get(
     json.loads(
-        requests.get('https://musescore.com/api/jmuse?id={}&index={}&type=img&v2=1'.format(score_id, 0),
+        requests.get(f"https://musescore.com/api/jmuse?id={score_id}&index=0&type=img&v2=1",
                      headers=score_header).text)
     ['info']['url']).headers['Content-Type']
 
 print("image content type: {}".format(filetype))
 
 if (filetype == "image/svg+xml"):
+
+    filepath = "output.pdf"
 
     c = canvas.Canvas(filepath)
 
@@ -135,17 +134,19 @@ if (filetype == "image/svg+xml"):
 
 elif (filetype == "image/png"):
 
+    filepath = "output.pdf"  # "D:\Ohjelmointi\musescorebot\output.pdf"
+
     images = []
 
     for i in range(0, pages_count):
 
         print("downloading image {} of {}...".format(
             i + 1, pages_count))
-            
+
         jmuse_url = 'https://musescore.com/api/jmuse?id={}&index={}&type=img&v2=1'.format(
             score_id, i)
         page_url = json.loads(requests.get(jmuse_url, headers=score_header).text)[
-                              'info']['url']
+            'info']['url']
 
         r = requests.get(page_url, headers=header, stream=True)
 
@@ -160,6 +161,18 @@ elif (filetype == "image/png"):
         images.append(pngfile)
 
     print("generating pdf...")
-    images[0].save(filepath, "PDF", resolution=100.0, save_all=True, append_images=images[1:])
+    images[0].save(filepath, "PDF", resolution=100.0,
+                   save_all=True, append_images=images[1:])
+
+else:
+    print("unknown file type: {}\nhalting...".format(filetype))
+    exit()
+
+try:
+
+    rename('output.pdf', "{}.pdf".format(title).replace(
+        '/', '').replace('|', '').replace('&', '').replace(':', ''))
+except Exception as e:
+    print("renaming the pdf file failed, saved using default name \"output.pdf\"")
 
 print("pdf creation success!")
