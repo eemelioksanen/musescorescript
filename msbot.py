@@ -1,3 +1,4 @@
+from ntpath import join
 import requests
 import json
 import re
@@ -7,8 +8,12 @@ from reportlab.graphics import renderPDF
 from reportlab.pdfgen import canvas
 import io
 from PIL import Image
-from os import rename
+from os import rename, path, getcwd, makedirs
 import sys
+
+# variables
+output_folder = "musescore"
+default_output_name = "output_default.pdf"
 
 save_images = False
 url = None
@@ -107,7 +112,17 @@ filetype = requests.get(
 
 print("image content type: {}".format(filetype))
 
-filepath = "output_default.pdf"
+filepath = path.join(getcwd(), output_folder)
+
+makedirs(filepath, exist_ok=True)
+
+filepath = path.join(filepath, default_output_name)
+
+image_output_folder = path.join(
+    getcwd(), output_folder, score_id + "_images", "")
+
+if (save_images):
+    makedirs(image_output_folder, exist_ok=True)
 
 if (filetype == "image/svg+xml"):
 
@@ -124,19 +139,18 @@ if (filetype == "image/svg+xml"):
         page_url = json.loads(requests.get(jmuse_url, headers=score_header).text)[
             "info"]["url"]
 
-        r = requests.get(page_url, headers=header, stream=True)
+        res = requests.get(page_url, headers=header)
 
-        if (r.status_code != 200):
+        if (res.status_code != 200):
             print("an error occured while downloading the files")
             exit()
-
-        res = requests.get(page_url, headers=header)
 
         svgfile = io.StringIO(res.text)
 
         if (save_images):
-            file = open("score{}.svg".format(i), "wb")
-            file.write(res.text)
+            file = open(path.join(image_output_folder,
+                        "score{}.svg".format(i)), "wb")
+            file.write(res.content)
             file.close()
 
         drawing = svg2rlg(svgfile)
@@ -172,7 +186,8 @@ elif (filetype == "image/png"):
             exit()
 
         if (save_images):
-            file = open("score{}.png".format(i), "wb+")
+            file = open(path.join(image_output_folder,
+                        "score{}.png".format(i)), "wb")
             file.write(res.content)
             file.close()
 
@@ -189,14 +204,14 @@ else:
     exit()
 
 try:
-
     new_name = re.sub(re.compile("[^0-9a-zA-Z,()' ]"), "", title)
     new_name += ".pdf"
-    rename(filepath, new_name)
+    rename_path = path.join(getcwd(), output_folder, new_name)
+    rename(filepath, rename_path)
+    print("pdf successfully saved to {}".format(rename_path))
 
-except Exception as e:
+except:
+    print("renaming the pdf file failed, saved using default name: \"{}\"\nperhaps the file already exists?".format(filepath))
 
-    print("renaming the pdf file failed, saved using default name \"{}\"\nerror: {}".format(
-        filepath, e))
-
-print("pdf creation success!")
+if (save_images):
+    print("images saved: {}".format(image_output_folder))
