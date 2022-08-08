@@ -1,4 +1,4 @@
-# A small bot for scraping music sheets from musescode.com
+# A small bot for scraping music sheets from musescore.com
 
 ## installation
 Install the following dependencies:
