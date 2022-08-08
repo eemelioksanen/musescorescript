@@ -10,11 +10,25 @@ from PIL import Image
 from os import rename
 import sys
 
-if (len(sys.argv) != 2):
+save_images = False
+url = None
+
+if (len(sys.argv) < 2):
     print("invalid number of arguments!")
     exit()
 
-url = sys.argv[1]
+for i in range(1, len(sys.argv) - 1):
+    match sys.argv[i]:
+        case "-m":
+            save_images = True
+        case _:
+            print("unknown argument!")
+            exit()
+
+url = sys.argv[len(sys.argv) - 1]
+
+if (not url):
+    print("please enter a valid url!")
 
 split_url = re.sub('https://', '', url)
 split_url = re.sub('www.', '', split_url)
@@ -120,6 +134,11 @@ if (filetype == "image/svg+xml"):
 
         svgfile = io.StringIO(res.text)
 
+        if (save_images):
+            file = open("score{}.svg".format(i), "wb")
+            file.write(res.text)
+            file.close()
+
         drawing = svg2rlg(svgfile)
 
         scale = 595.0 / drawing.width
@@ -146,13 +165,16 @@ elif (filetype == "image/png"):
         page_url = json.loads(requests.get(jmuse_url, headers=score_header).text)[
             'info']['url']
 
-        r = requests.get(page_url, headers=header, stream=True)
+        res = requests.get(page_url, headers=header)
 
-        if (r.status_code != 200):
+        if (res.status_code != 200):
             print("an error occured while downloading the files")
             exit()
 
-        res = requests.get(page_url, headers=header)
+        if (save_images):
+            file = open("score{}.png".format(i), "wb+")
+            file.write(res.content)
+            file.close()
 
         pngfile = Image.open(io.BytesIO(res.content))
 
