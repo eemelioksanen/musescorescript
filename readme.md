@@ -1,7 +1,7 @@
 # A small bot for scraping music sheets from musescore.com
 
 ## installation
-Install the following dependencies:
+Install the dependencies:
 `pip install -r requirements.txt`
 
 Then run the program by giving an url as a parameter:
