@@ -6,13 +6,15 @@ from bs4 import BeautifulSoup
 from svglib.svglib import svg2rlg
 from reportlab.graphics import renderPDF
 from reportlab.pdfgen import canvas
-import io
+from io import BytesIO
 from PIL import Image
 from os import rename, path, getcwd, makedirs
 import sys
 
 # variables
-output_folder = "musescore"
+# set a folder where the pdf and images are downloaded, leaving this empty will download the content directly to working directory
+output_folder = ""
+# default name for the pdf in case the title is invalid or such a file exists already
 default_output_name = "output_default.pdf"
 
 save_images = False
@@ -121,8 +123,26 @@ filepath = path.join(filepath, default_output_name)
 image_output_folder = path.join(
     getcwd(), output_folder, score_id + "_images", "")
 
+
+def download_image(index):  # downloads an image and returns a BytesIO-filelike object
+    print("downloading image {} of {}...".format(
+        index + 1, pages_count))
+    jmuse_url = "https://musescore.com/api/jmuse?id={}&index={}&type=img&v2=1".format(
+        score_id, i)
+    page_url = json.loads(requests.get(jmuse_url, headers=score_header).text)[
+        "info"]["url"]
+    res = requests.get(page_url, headers=header)
+    if (res.status_code != 200):
+        print("an error occured while downloading the files")
+        exit()
+
+    file = BytesIO(res.content)
+    return file
+
+
 if (save_images):
     makedirs(image_output_folder, exist_ok=True)
+
 
 if (filetype == "image/svg+xml"):
 
@@ -130,27 +150,12 @@ if (filetype == "image/svg+xml"):
 
     for i in range(0, pages_count):
 
-        print("downloading image and generating pdf page {} of {}...".format(
-            i + 1, pages_count))
-
-        jmuse_url = "https://musescore.com/api/jmuse?id={}&index={}&type=img&v2=1".format(
-            score_id, i)
-
-        page_url = json.loads(requests.get(jmuse_url, headers=score_header).text)[
-            "info"]["url"]
-
-        res = requests.get(page_url, headers=header)
-
-        if (res.status_code != 200):
-            print("an error occured while downloading the files")
-            exit()
-
-        svgfile = io.StringIO(res.text)
+        svgfile = download_image(i)
 
         if (save_images):
             file = open(path.join(image_output_folder,
                         "score{}.svg".format(i)), "wb")
-            file.write(res.content)
+            file.write(svgfile.getbuffer())
             file.close()
 
         drawing = svg2rlg(svgfile)
@@ -163,6 +168,7 @@ if (filetype == "image/svg+xml"):
 
         c.showPage()
 
+    print("generating pdf...")
     c.save()
 
 elif (filetype == "image/png"):
@@ -171,29 +177,17 @@ elif (filetype == "image/png"):
 
     for i in range(0, pages_count):
 
-        print("downloading image {} of {}...".format(
-            i + 1, pages_count))
+        pngfile = download_image(i)
 
-        jmuse_url = "https://musescore.com/api/jmuse?id={}&index={}&type=img&v2=1".format(
-            score_id, i)
-        page_url = json.loads(requests.get(jmuse_url, headers=score_header).text)[
-            'info']['url']
-
-        res = requests.get(page_url, headers=header)
-
-        if (res.status_code != 200):
-            print("an error occured while downloading the files")
-            exit()
+        image = Image.open(pngfile)
 
         if (save_images):
             file = open(path.join(image_output_folder,
                         "score{}.png".format(i)), "wb")
-            file.write(res.content)
+            file.write(pngfile.getbuffer())
             file.close()
 
-        pngfile = Image.open(io.BytesIO(res.content))
-
-        images.append(pngfile)
+        images.append(image)
 
     print("generating pdf...")
     images[0].save(filepath, "PDF", resolution=100.0,
