@@ -1,3 +1,4 @@
+from asyncio import as_completed
 from ntpath import join
 import requests
 import json
@@ -10,6 +11,7 @@ from io import BytesIO
 from PIL import Image
 from os import rename, path, getcwd, makedirs
 import sys
+import concurrent.futures
 
 # variables
 # set a folder where the pdf and images are downloaded, leaving this empty will download the content directly to working directory
@@ -125,10 +127,8 @@ image_output_folder = path.join(
 
 
 def download_image(index):  # downloads an image and returns a BytesIO-filelike object
-    print("downloading image {} of {}...".format(
-        index + 1, pages_count))
     jmuse_url = "https://musescore.com/api/jmuse?id={}&index={}&type=img&v2=1".format(
-        score_id, i)
+        score_id, index)
     page_url = json.loads(requests.get(jmuse_url, headers=score_header).text)[
         "info"]["url"]
     res = requests.get(page_url, headers=header)
@@ -137,7 +137,27 @@ def download_image(index):  # downloads an image and returns a BytesIO-filelike 
         exit()
 
     file = BytesIO(res.content)
-    return file
+    return (index, file)
+
+
+def download_all():  # downloads all images from index 0 to pages_count - 1
+    images = [None] * pages_count
+    print("downloading images...")
+    with concurrent.futures.ThreadPoolExecutor() as executor:
+        future_img = {executor.submit(
+            download_image, i): i for i in range(0, pages_count)}
+        for future in concurrent.futures.as_completed(future_img):
+            images[future.result()[0]] = future.result()[1]
+
+    return images
+
+
+def write_images(images, extension):
+    for i in range(0, pages_count):
+        f = open(path.join(image_output_folder,
+                           "score{}.{}".format(i, extension)), "wb")
+        f.write(images[i].getbuffer())
+        f.close()
 
 
 if (save_images):
@@ -148,15 +168,16 @@ if (filetype == "image/svg+xml"):
 
     c = canvas.Canvas(filepath)
 
+    images = download_all()
+
+    if (save_images):
+        write_images(images, "svg")
+
     for i in range(0, pages_count):
 
-        svgfile = download_image(i)
+        print("generating pdf page {} of {}...".format(i + 1, pages_count))
 
-        if (save_images):
-            file = open(path.join(image_output_folder,
-                        "score{}.svg".format(i)), "wb")
-            file.write(svgfile.getbuffer())
-            file.close()
+        svgfile = images[i]
 
         drawing = svg2rlg(svgfile)
 
@@ -168,30 +189,21 @@ if (filetype == "image/svg+xml"):
 
         c.showPage()
 
-    print("generating pdf...")
     c.save()
 
 elif (filetype == "image/png"):
 
-    images = []
+    images = download_all()
 
-    for i in range(0, pages_count):
-
-        pngfile = download_image(i)
-
-        image = Image.open(pngfile)
-
-        if (save_images):
-            file = open(path.join(image_output_folder,
-                        "score{}.png".format(i)), "wb")
-            file.write(pngfile.getbuffer())
-            file.close()
-
-        images.append(image)
+    if (save_images):
+        write_images(images, "png")
 
     print("generating pdf...")
-    images[0].save(filepath, "PDF", resolution=100.0,
-                   save_all=True, append_images=images[1:])
+
+    pdf_images = [Image.open(image) for image in images]
+
+    pdf_images[0].save(filepath, "PDF", resolution=100.0,
+                       save_all=True, append_images=pdf_images[1:])
 
 else:
     print("unknown file type: {}\nhalting...".format(filetype))
