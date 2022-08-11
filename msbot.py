@@ -163,20 +163,13 @@ def write_images(images, extension):
 
 def draw_all_svg(images):
 
-    def draw_and_wrap_with_index(idx, img):
+    def draw_and_wrap_with_index(img):
         svg = svg2rlg(img)
         scale = 595.0 / svg.width
         svg.scale(scale, scale)
-        return (idx, svg)
+        return (svg)
 
-    svg_images = [None] * pages_count
-    with concurrent.futures.ThreadPoolExecutor() as executor:
-        future_img = {executor.submit(
-            draw_and_wrap_with_index, i, images[i]): i for i in range(0, pages_count)}
-        for future in concurrent.futures.as_completed(future_img):
-            svg_images[future.result()[0]] = future.result()[1]
-
-    return svg_images
+    return [draw_and_wrap_with_index(img) for img in images]
 
 
 if (save_images):
