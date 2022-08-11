@@ -1,4 +1,4 @@
 beautifulsoup4
 svglib
 reportlab
-Pillow
+img2pdf

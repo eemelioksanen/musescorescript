@@ -4,20 +4,21 @@ import requests
 import json
 import re
 from bs4 import BeautifulSoup
-from svglib.svglib import svg2rlg
-from reportlab.graphics import renderPDF
-from reportlab.pdfgen import canvas
 from io import BytesIO
-from PIL import Image
 from os import rename, path, getcwd, makedirs
 import sys
+from svglib.svglib import svg2rlg
 import concurrent.futures
+from reportlab.graphics import renderPDF
+from reportlab.pdfgen import canvas
+import img2pdf
 
 # variables
 # set a folder where the pdf and images are downloaded, leaving this empty will download the content directly to working directory
 output_folder = ""
 # default name for the pdf in case the title is invalid or such a file exists already
 default_output_name = "output_default.pdf"
+max_pages = 150
 
 save_images = False
 url = None
@@ -66,16 +67,16 @@ title = page.title.text.replace(" | Musescore.com", "")
 
 print(title)
 
-pageregex = re.compile("(pages_count&quot;:[0-9]{1,2})")
+pageregex = re.compile("(pages_count&quot;:[0-9]{1,3})")
 
 pages_count = int(re.findall(
-    "[0-9]{1,2}", re.findall(pageregex, r.text)[0])[0])
+    "[0-9]{1,3}", re.findall(pageregex, r.text)[0])[0])
 
 print("pages: {}".format(pages_count))
 
 # exit in case of obscure amount of pages
-if (pages_count > 50 or pages_count < 0):
-    print("invalid page count (max 50): {}".format(pages_count))
+if (pages_count > max_pages or pages_count < 0):
+    print("invalid page count (max {}): {}".format(max_pages, pages_count))
     exit()
 
 regex = re.compile(
@@ -160,6 +161,24 @@ def write_images(images, extension):
         f.close()
 
 
+def draw_all_svg(images):
+
+    def draw_and_wrap_with_index(idx, img):
+        svg = svg2rlg(img)
+        scale = 595.0 / svg.width
+        svg.scale(scale, scale)
+        return (idx, svg)
+
+    svg_images = [None] * pages_count
+    with concurrent.futures.ThreadPoolExecutor() as executor:
+        future_img = {executor.submit(
+            draw_and_wrap_with_index, i, images[i]): i for i in range(0, pages_count)}
+        for future in concurrent.futures.as_completed(future_img):
+            svg_images[future.result()[0]] = future.result()[1]
+
+    return svg_images
+
+
 if (save_images):
     makedirs(image_output_folder, exist_ok=True)
 
@@ -173,19 +192,12 @@ if (filetype == "image/svg+xml"):
     if (save_images):
         write_images(images, "svg")
 
-    for i in range(0, pages_count):
+    print("generating pdf file...")
+    svg_images = draw_all_svg(images)
 
-        print("generating pdf page {} of {}...".format(i + 1, pages_count))
+    for img in svg_images:
 
-        svgfile = images[i]
-
-        drawing = svg2rlg(svgfile)
-
-        scale = 595.0 / drawing.width
-
-        drawing.scale(scale, scale)
-
-        renderPDF.draw(drawing, c, 0, 0, 0)
+        renderPDF.draw(img, c, 0, 0, 0)
 
         c.showPage()
 
@@ -200,10 +212,10 @@ elif (filetype == "image/png"):
 
     print("generating pdf...")
 
-    pdf_images = [Image.open(image) for image in images]
-
-    pdf_images[0].save(filepath, "PDF", resolution=100.0,
-                       save_all=True, append_images=pdf_images[1:])
+    a4inpt = (img2pdf.mm_to_pt(310), img2pdf.mm_to_pt(297))
+    layout_fun = img2pdf.get_layout_fun(a4inpt)
+    with open(filepath, "wb") as f:
+        f.write(img2pdf.convert(images, layout_fun=layout_fun))
 
 else:
     print("unknown file type: {}\nhalting...".format(filetype))
