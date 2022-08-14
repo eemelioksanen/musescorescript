@@ -1,4 +1,4 @@
-# A small bot for scraping music sheets from musescore.com
+# A small program for scraping music sheets from musescore.com
 
 ## installation
 
@@ -12,4 +12,4 @@ Then run the program by giving an url as a parameter:
 
 Run the program with parameter `-m` to save the images as well
 
-The program will save the generated pdf to a folder called `musescore` that will be created to the working directory.
+The program will save the generated pdf and save it to the working directory.
