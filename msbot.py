@@ -161,13 +161,23 @@ def main():
 
     def draw_all_svg(images):
 
-        def draw_and_wrap_with_index(img):
+        drawing_progress = "[" + pages_count * "." + "]"
+
+        def draw(img):
             svg = svg2rlg(img)
             scale = 595.0 / svg.width
             svg.scale(scale, scale)
             return (svg)
 
-        return [draw_and_wrap_with_index(img) for img in images]
+        drawn_images = []
+
+        for img in images:
+            drawn_images.append(draw(img))
+
+            drawing_progress = drawing_progress.replace(".", "#", 1)
+            print(drawing_progress, end="\r")
+        print("")
+        return drawn_images
 
     if (save_images):
         makedirs(image_output_folder, exist_ok=True)
@@ -178,11 +188,15 @@ def main():
 
         images = download_all()
 
+        pdf_progress = "[" + pages_count * "." + "]"
+
         if (save_images):
             write_images(images, "svg")
 
-        print("generating pdf file...")
+        print("drawing images...")
         svg_images = draw_all_svg(images)
+
+        print("generating pdf file...")
 
         for img in svg_images:
 
@@ -190,7 +204,11 @@ def main():
 
             c.showPage()
 
+            pdf_progress = pdf_progress.replace(".", "#", 1)
+
+            print(pdf_progress, end="\r")
         c.save()
+        print("")
 
     elif (filetype == "image/png"):
 
