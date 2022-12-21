@@ -2,3 +2,4 @@ beautifulsoup4
 svglib
 reportlab
 img2pdf
+requests
