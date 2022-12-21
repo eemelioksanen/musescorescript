@@ -25,7 +25,7 @@ def main():
     save_images = False
     url = None
 
-    if (len(sys.argv) < 2):
+    if len(sys.argv) < 2:
         print("invalid number of arguments!")
         exit()
 
@@ -39,16 +39,17 @@ def main():
 
     url = sys.argv[len(sys.argv) - 1]
 
-    if (not url):
+    if "musescore.com/" not in url:
         print("please enter a valid url!")
+        exit()
 
-    split_url = re.sub('https://', '', url)
-    split_url = re.sub('www.', '', split_url)
-    split_url = split_url.split('/')
+    split_url = re.sub("https://", "", url)
+    split_url = re.sub("www.", "", split_url)
+    split_url = split_url.split("/")
 
     score_id = None
 
-    if (len(split_url) == 5):
+    if len(split_url) == 5:
         score_id = split_url[4]
 
     else:
@@ -60,8 +61,8 @@ def main():
 
     r = requests.get(url, headers=header)
 
-    if (r.status_code != 200):
-        print("error connecting to {}".format(url))
+    if r.status_code != 200:
+        print(f"error connecting to {url}")
 
     page = BeautifulSoup(r.content, "html.parser")
 
@@ -71,53 +72,32 @@ def main():
 
     pageregex = re.compile("(pages_count&quot;:[0-9]{1,3})")
 
-    pages_count = int(re.findall(
-        "[0-9]{1,3}", re.findall(pageregex, r.text)[0])[0])
+    pages_count = int(re.findall("[0-9]{1,3}", re.findall(pageregex, r.text)[0])[0])
 
-    print("pages: {}".format(pages_count))
+    print(f"pages: {pages_count}")
 
     # exit in case of obscure amount of pages
-    if (pages_count > max_pages or pages_count < 0):
-        print("invalid page count (max {}): {}".format(max_pages, pages_count))
+    if pages_count > max_pages or pages_count < 0:
+        print(f"invalid page count (max {max_pages}): {pages_count}")
         exit()
 
-    regex = re.compile(
-        "(https://musescore.com/static/public/build/musescore)(_es6)?(/)[0-9]{1,}(/)[0-9]{1,}(.)[a-z0-9]{1,}(.js)"
-    )
-
-    jmuse = None
-
-    for link in page.find_all("link"):
-        if (regex.match(link.get("href"))):
-            jmuse = link.get("href")
-            break
-
-    if (not jmuse):
-        print("could not find the jmuse link to extract authorization token")
-        exit()
-
-    r = requests.get(jmuse, headers=header)
-
-    if (r.status_code != 200):
-        print("error at HTTP GET: {}\nstatus code: {}").__format__(
-            jmuse, r.status_code)
-
-    token_regex = re.compile("[a-z0-9]{40}")
-
-    token = re.findall(token_regex, r.text)[0]
+    token = "8c022bdef45341074ce876ae57a48f64b86cdcf5"  # hard coded auth token
 
     score_header = {
         "authorization": token,
-        "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/104.0.5112.81 Safari/537.36 Edg/104.0.1293.47"
+        "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/104.0.5112.81 Safari/537.36 Edg/104.0.1293.47",
     }
 
     filetype = requests.get(
         json.loads(
-            requests.get(f"https://musescore.com/api/jmuse?id={score_id}&index=0&type=img&v2=1",
-                         headers=score_header).text)
-        ['info']['url']).headers['Content-Type']
+            requests.get(
+                f"https://musescore.com/api/jmuse?id={score_id}&index=0&type=img&v2=1",
+                headers=score_header,
+            ).text
+        )["info"]["url"]
+    ).headers["Content-Type"]
 
-    print("image content type: {}".format(filetype))
+    print(f"image content type: {filetype}")
 
     filepath = path.join(getcwd(), output_folder)
 
@@ -125,16 +105,19 @@ def main():
 
     filepath = path.join(filepath, default_output_name)
 
-    image_output_folder = path.join(
-        getcwd(), output_folder, score_id + "_images", "")
+    image_output_folder = path.join(getcwd(), output_folder, score_id + "_images", "")
 
-    def download_image(index):  # downloads an image and returns a BytesIO-filelike object
-        jmuse_url = "https://musescore.com/api/jmuse?id={}&index={}&type=img&v2=1".format(
-            score_id, index)
+    def download_image(
+        index,
+    ):  # downloads an image and returns a BytesIO-filelike object
+        jmuse_url = (
+            f"https://musescore.com/api/jmuse?id={score_id}&index={index}&type=img&v2=1"
+        )
         page_url = json.loads(requests.get(jmuse_url, headers=score_header).text)[
-            "info"]["url"]
+            "info"
+        ]["url"]
         res = requests.get(page_url, headers=header)
-        if (res.status_code != 200):
+        if res.status_code != 200:
             print("an error occured while downloading the files")
             exit()
 
@@ -145,8 +128,9 @@ def main():
         images = [None] * pages_count
         print("downloading images...")
         with concurrent.futures.ThreadPoolExecutor() as executor:
-            future_img = {executor.submit(
-                download_image, i): i for i in range(0, pages_count)}
+            future_img = {
+                executor.submit(download_image, i): i for i in range(0, pages_count)
+            }
             for future in concurrent.futures.as_completed(future_img):
                 images[future.result()[0]] = future.result()[1]
 
@@ -154,8 +138,7 @@ def main():
 
     def write_images(images, extension):
         for i in range(0, pages_count):
-            f = open(path.join(image_output_folder,
-                               "score{}.{}".format(i, extension)), "wb")
+            f = open(path.join(image_output_folder, f"score{i}.{extension}"), "wb")
             f.write(images[i].getbuffer())
             f.close()
 
@@ -167,7 +150,7 @@ def main():
             svg = svg2rlg(img)
             scale = 595.0 / svg.width
             svg.scale(scale, scale)
-            return (svg)
+            return svg
 
         drawn_images = []
 
@@ -179,10 +162,10 @@ def main():
         print("")
         return drawn_images
 
-    if (save_images):
+    if save_images:
         makedirs(image_output_folder, exist_ok=True)
 
-    if (filetype == "image/svg+xml"):
+    if filetype == "image/svg+xml":
 
         c = canvas.Canvas(filepath)
 
@@ -190,7 +173,7 @@ def main():
 
         pdf_progress = "[" + pages_count * "." + "]"
 
-        if (save_images):
+        if save_images:
             write_images(images, "svg")
 
         print("drawing images...")
@@ -207,14 +190,15 @@ def main():
             pdf_progress = pdf_progress.replace(".", "#", 1)
 
             print(pdf_progress, end="\r")
+
         c.save()
         print("")
 
-    elif (filetype == "image/png"):
+    elif filetype == "image/png":
 
         images = download_all()
 
-        if (save_images):
+        if save_images:
             write_images(images, "png")
 
         print("generating pdf...")
@@ -225,7 +209,7 @@ def main():
             f.write(img2pdf.convert(images, layout_fun=layout_fun))
 
     else:
-        print("unknown file type: {}\nhalting...".format(filetype))
+        print(f"unknown file type: {filetype}\nhalting...")
         exit()
 
     try:
@@ -233,13 +217,15 @@ def main():
         new_name += ".pdf"
         rename_path = path.join(getcwd(), output_folder, new_name)
         rename(filepath, rename_path)
-        print("pdf successfully saved to {}".format(rename_path))
+        print(f"pdf successfully saved to {rename_path}")
 
     except:
-        print("renaming the pdf file failed, saved using default name: \"{}\"\nperhaps the file already exists?".format(filepath))
+        print(
+            f'renaming the pdf file failed, saved using default name: "{filepath}"\nperhaps the file already exists?'
+        )
 
-    if (save_images):
-        print("images saved: {}".format(image_output_folder))
+    if save_images:
+        print(f"images saved to: {image_output_folder}")
 
 
 if __name__ == "__main__":
