@@ -193,6 +193,7 @@ def main():
 
         c.save()
         print("")
+        print("")
 
     elif filetype == "image/png":
 
